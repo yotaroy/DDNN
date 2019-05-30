@@ -2,7 +2,7 @@ from doubledummy import DDS
 import numpy as np
 import os
 
-num = 10 ** 6 
+num = 10 ** 5 
 
 path = 'dataset{}'.format(num)
 p = path
