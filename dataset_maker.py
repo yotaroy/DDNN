@@ -4,7 +4,7 @@ import os
 
 num = 10 ** 5 
 
-path = 'dataset{}'.format(num)
+path = 'dataset/dataset{}'.format(num)
 p = path
 i = 1
 while os.path.exists(p+'.csv'):

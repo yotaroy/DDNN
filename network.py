@@ -21,6 +21,8 @@ class Network(nn.Module):
         x = F.relu(x)
         x = self.fc2(x)
         x = F.relu(x)
+        x = self.fc2(x)
+        x = F.relu(x)
         x = self.fc3(x)
         return x
 
@@ -99,6 +101,7 @@ def test(loader, batch_size, name='test'):
     with torch.no_grad():
         model.eval()
         test_loss = 0
+        dif_0, dif_p1, dif_m1, dif_else = 0, 0, 0, 0
         for hand, trick in loader:
             declarer, _, partner, _ = torch.chunk(hand, 4, dim=1)
             n, e, s, w = torch.chunk(trick, 4, dim=1)
@@ -109,9 +112,20 @@ def test(loader, batch_size, name='test'):
             output = model(torch.cat((declarer, partner), dim=1).float().to(device))
             test_loss += F.mse_loss(output, dds).item()
 
+            dif = output - dds 
+            dif_0 += ((-0.5 < dif)*(dif < 0.5)).sum().item()
+            dif_p1 += ((-1.5 < dif)*(dif <= -0.5)).sum().item()
+            dif_m1 += ((0.5 <= dif)*(dif < 1.5)).sum().item()
+            dif_else += (1.5 <= dif).sum().item() + (dif <= -1.5).sum().item()
+
         test_loss /= (len(loader.dataset) / batch_size)
 
         print('{}_loss={}'.format(name, test_loss))
+        print('x = Double Dummy Analysis - prediction')
+        print('-0.5 <  x  <  0.5 :', dif_0)
+        print(' 0.5 <= x  <  1.5 :', dif_m1)
+        print('-1.5 <  x <= -0.5 :', dif_p1)
+        print('       else       :', dif_else)
         return test_loss
 
 def graph_plot(path):
@@ -121,6 +135,7 @@ def graph_plot(path):
     plt.yscale('log')
     plt.legend()
     plt.savefig(path)
+    plt.close()
 
 if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -128,7 +143,7 @@ if __name__ == "__main__":
 
     BATCH_SIZE = 50
 
-    data = Data(train_path='dataset100000_5.csv', test_path='dataset1000.csv')
+    data = Data(train_path='dataset/dataset_1M.csv', test_path='dataset/dataset10000.csv')
     
     train_hands, train_tricks = data.train_data()
     valid_hands, valid_tricks = data.valid_data()
@@ -141,22 +156,32 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
     valid_loader = DataLoader(valid_data, batch_size=BATCH_SIZE, shuffle=False)
     test_loader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
+
+    l2_penalty = 10 ** (-5)
     
     model = Network().to(device)
-    optimizer = optim.Adam(model.parameters())    
+    optimizer = optim.Adam(model.parameters(), weight_decay=l2_penalty)    
 
-    EPOCH = 10 ** 5
+    EPOCH = 10 ** 2
 
     train_loss = [np.nan]
     valid_loss = [] 
 
+    result_pic_path = 'result/result'
+    p = result_pic_path
+    i = 1
+    while os.path.exists(p+'.png'):
+        p = result_pic_path + '_{}'.format(i)
+        i += 1
+    result_pic_path = p + '.png'
+
     start = time.time()
     valid_loss.append(test(valid_loader, BATCH_SIZE, 'valid'))
-    for e in range(EPOCH):
+    for epo in range(1, EPOCH+1):
         print('--------------------')
-        train_loss.append(train(e, BATCH_SIZE))
+        train_loss.append(train(epo, BATCH_SIZE))
         valid_loss.append(test(valid_loader, BATCH_SIZE, 'valid'))
-        if (e+1) % 1000 == 0:
-            graph_plot('ex_dataset5.png')
+        if epo % 10 == 0:
+            graph_plot(result_pic_path)
     print('total time =', time.time() - start)
         
